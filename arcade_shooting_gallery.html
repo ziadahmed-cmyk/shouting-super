@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لعبة الرماية والأهداف الكلاسيكية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewport='0 0 100 100' style='fill:black;font-size:24px;'><text y='50%'>🎯</text></svg>") 20 20, auto;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        button, input {
+            cursor: pointer;
+        }
+        /* Custom animations for targets */
+        @keyframes floatTarget {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(3deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+        .animate-float {
+            animation: floatTarget 2s ease-in-out infinite;
+        }
+        /* Background arcade grid and lighting */
+        .arcade-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #31103f 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        .arcade-bg::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 30px 30px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="arcade-bg h-screen w-screen flex flex-col justify-between overflow-hidden text-white">
+
+    <header class="w-full p-4 flex justify-between items-center bg-black/40 backdrop-blur-md border-b border-white/10 z-20 shadow-lg">
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-inner">
+                <span class="text-amber-400 font-bold text-lg">⭐ النقاط:</span>
+                <span id="scoreVal" class="text-2xl font-black text-amber-300">0</span>
+            </div>
+            <div class="flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-inner">
+                <span class="text-red-400 font-bold text-lg">❤️ الأرواح:</span>
+                <span id="livesVal" class="text-2xl font-black text-red-400">3</span>
+            </div>
+        </div>
+        
+        <div class="text-center hidden md:block">
+            <h1 class="text-xl font-black bg-gradient-to-r from-amber-400 via-rose-500 to-purple-500 bg-clip-text text-transparent">صانع الرماية الأركيدي</h1>
+            <p class="text-xs text-slate-400">صوب بدقة واحذر من الأهداف الخاطئة!</p>
+        </div>
+
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-inner">
+                <span class="text-blue-400 font-bold text-lg">⏱️ الوقت:</span>
+                <span id="timeVal" class="text-2xl font-black text-blue-300">60</span>
+            </div>
+            <div class="flex items-center gap-2 bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 shadow-inner">
+                <span class="text-emerald-400 font-bold text-lg">🔥 التتابع:</span>
+                <span id="comboVal" class="text-2xl font-black text-emerald-300">1x</span>
+            </div>
+        </div>
+    </header>
+
+    <main id="gameArena" class="relative flex-1 w-full cursor-crosshair overflow-hidden">
+        <!-- Floating particles container -->
+        <div id="particleContainer" class="absolute inset-0 pointer-events-none z-10"></div>
+        
+        <!-- Floating target click popups container -->
+        <div id="popupContainer" class="absolute inset-0 pointer-events-none z-20"></div>
+
+        <!-- Start Screen Overlay -->
+        <div id="startScreen" class="absolute inset-0 z-30 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center">
+            <div class="max-w-md w-full bg-slate-900/90 p-8 rounded-3xl border-2 border-purple-500/50 shadow-2xl space-y-6 transform transition-all">
+                <div class="inline-block p-4 rounded-full bg-purple-500/20 text-purple-400 text-5xl mb-2 animate-bounce">
+                    🎯
+                </div>
+                <h2 class="text-4xl font-black tracking-wide text-white">تحدي الرماية</h2>
+                <p class="text-slate-300 text-sm leading-relaxed">
+                    أطلق النار على الأهداف المتنوعة قبل أن تختفي! احذر من إصابة الأهداف المحظورة ❌. اضغط على شاشة اللعب أو زر الفضاء لإطلاق النار، وحرف <kbd class="px-2 py-1 bg-slate-700 rounded text-xs">R</kbd> لإعادة التعبئة.
+                </p>
+                <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xl rounded-2xl shadow-lg shadow-purple-600/30 transition-all transform hover:scale-105 active:scale-95">
+                    بدء اللعبة الآن 🚀
+                </button>
+            </div>
+        </div>
+
+        <!-- Game Over Screen Overlay -->
+        <div id="gameOverScreen" class="absolute inset-0 z-30 bg-black/85 backdrop-blur-md hidden flex flex-col items-center justify-center p-6 text-center">
+            <div class="max-w-md w-full bg-slate-900/95 p-8 rounded-3xl border-2 border-rose-500/50 shadow-2xl space-y-6">
+                <div class="inline-block p-4 rounded-full bg-rose-500/20 text-rose-400 text-5xl mb-2">
+                    🏆
+                </div>
+                <h2 class="text-4xl font-black text-white">انتهت اللعبة!</h2>
+                <div class="bg-slate-800/80 p-4 rounded-2xl border border-slate-700 space-y-2">
+                    <p class="text-slate-400 text-sm">النتيجة النهائية</p>
+                    <p id="finalScore" class="text-5xl font-black text-amber-400">0</p>
+                </div>
+                <button onclick="startGame()" class="w-full py-4 bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-white font-black text-xl rounded-2xl shadow-lg shadow-rose-600/30 transition-all transform hover:scale-105 active:scale-95">
+                    العب مرة أخرى 🔄
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <footer class="w-full p-4 bg-black/50 backdrop-blur-md border-t border-white/10 flex justify-between items-center z-20">
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-bold text-slate-400">الذخيرة:</span>
+            <div id="ammoContainer" class="flex gap-1.5 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
+                <!-- Ammo bullets rendered via JS -->
+            </div>
+            <button onclick="reloadGun()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded-lg text-xs font-bold text-slate-200 transition-all active:scale-95">
+                تعبئة (R)
+            </button>
+        </div>
+
+        <div class="text-xs text-slate-400 hidden sm:block">
+            اضغط بالماوس لإطلاق النار | تفادي الأهداف الحمراء
+        </div>
+    </footer>
+
+    <script>
+        // Game State Variables
+        let score = 0;
+        let lives = 3;
+        let timeLeft = 60;
+        let combo = 1;
+        let maxAmmo = 6;
+        let ammo = 6;
+        let isPlaying = false;
+        let gameTimer = null;
+        let targetSpawnInterval = null;
+        let activeTargets = [];
+
+        // Web Audio API Sound Generator helper
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'shoot') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.15);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (type === 'hit') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'badHit') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(80, now + 0.2);
+                gainNode.gain.setValueAtTime(0.3, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'empty') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.setValueAtTime(100, now + 0.05);
+                gainNode.gain.setValueAtTime(0.15, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'reload') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.25);
+                gainNode.gain.setValueAtTime(0.2, now);
+                gainNode.gain.linearRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        }
+
+        // DOM Elements
+        const scoreValEl = document.getElementById('scoreVal');
+        const livesValEl = document.getElementById('livesVal');
+        const timeValEl = document.getElementById('timeVal');
+        const comboValEl = document.getElementById('comboVal');
+        const gameArena = document.getElementById('gameArena');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreEl = document.getElementById('finalScore');
+        const ammoContainer = document.getElementById('ammoContainer');
+        const particleContainer = document.getElementById('particleContainer');
+        const popupContainer = document.getElementById('popupContainer');
+
+        function updateUI() {
+            scoreValEl.textContent = score;
+            livesValEl.textContent = lives;
+            timeValEl.textContent = timeLeft;
+            comboValEl.textContent = combo + 'x';
+            
+            // Render Ammo Bullets
+            ammoContainer.innerHTML = '';
+            for (let i = 0; i < maxAmmo; i++) {
+                const bullet = document.createElement('div');
+                bullet.className = `w-3 h-6 rounded-sm transition-all ${i < ammo ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-slate-700 opacity-40'}`;
+                ammoContainer.appendChild(bullet);
+            }
+        }
+
+        function startGame() {
+            score = 0;
+            lives = 3;
+            timeLeft = 60;
+            combo = 1;
+            ammo = maxAmmo;
+            isPlaying = true;
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            // Clear existing targets
+            document.querySelectorAll('.target-item').forEach(el => el.remove());
+            activeTargets = [];
+
+            updateUI();
+
+            // Start Timers
+            clearInterval(gameTimer);
+            gameTimer = setInterval(() => {
+                timeLeft--;
+                updateUI();
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+
+            clearInterval(targetSpawnInterval);
+            targetSpawnInterval = setInterval(() => {
+                if (isPlaying) spawnTarget();
+            }, 800);
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameTimer);
+            clearInterval(targetSpawnInterval);
+            document.querySelectorAll('.target-item').forEach(el => el.remove());
+            
+            finalScoreEl.textContent = score;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // Spawn dynamic target with randomized types
+        function spawnTarget() {
+            if (!isPlaying) return;
+
+            const target = document.createElement('div');
+            target.className = 'target-item absolute rounded-full flex items-center justify-center shadow-xl cursor-pointer select-none animate-float';
+            
+            // Determine type: 70% normal target, 15% bonus star, 15% hazardous red target
+            const rand = Math.random();
+            let type = 'normal';
+            let size = 70;
+            let points = 100;
+            let bgClass = 'bg-gradient-to-tr from-rose-600 via-rose-500 to-amber-400 border-4 border-white shadow-rose-500/50';
+            let iconText = '🎯';
+
+            if (rand < 0.15) {
+                type = 'bonus';
+                size = 50;
+                points = 300;
+                bgClass = 'bg-gradient-to-tr from-amber-400 via-yellow-300 to-amber-600 border-4 border-white shadow-amber-400/85';
+                iconText = '⭐';
+            } else if (rand < 0.30) {
+                type = 'danger';
+                size = 75;
+                points = -200;
+                bgClass = 'bg-gradient-to-tr from-red-800 via-red-600 to-black border-4 border-rose-400 shadow-red-900/80';
+                iconText = '❌';
+            }
+
+            target.style.width = `${size}px`;
+            target.style.height = `${size}px`;
+
+            // Random positions avoiding edges
+            const arenaRect = gameArena.getBoundingClientRect();
+            const maxX = arenaRect.width - size - 40;
+            const maxY = arenaRect.height - size - 40;
+            const randomX = Math.max(20, Math.floor(Math.random() * maxX));
+            const randomY = Math.max(20, Math.floor(Math.random() * maxY));
+
+            target.style.left = `${randomX}px`;
+            target.style.top = `${randomY}px`;
+            target.innerHTML = `<span class="text-2xl">${iconText}</span>`;
+
+            // Target lifetime before disappearing
+            const lifetime = Math.max(1200, 2500 - (score / 10));
+            const hideTimeout = setTimeout(() => {
+                if (target.parentNode) {
+                    target.style.transform = 'scale(0)';
+                    setTimeout(() => target.remove(), 300);
+                    if (type === 'normal') {
+                        combo = 1; // Reset combo on miss normal target
+                        updateUI();
+                    }
+                }
+            }, lifetime);
+
+            // Click or tap handler
+            target.addEventListener('pointerdown', (e) => {
+                e.stopPropagation();
+                if (!isPlaying) return;
+
+                clearTimeout(hideTimeout);
+                createParticles(e.clientX, e.clientY, type === 'bonus' ? '#f59e0b' : type === 'danger' ? '#ef4444' : '#3b82f6');
+                showPopup(e.clientX, e.clientY, type === 'danger' ? '-200' : `+${points * combo}`, type === 'danger' ? 'text-red-400' : 'text-amber-300');
+
+                if (type === 'danger') {
+                    playSound('badHit');
+                    score = Math.max(0, score + points);
+                    lives--;
+                    combo = 1;
+                    if (lives <= 0) {
+                        endGame();
+                    }
+                } else {
+                    playSound('hit');
+                    score += points * combo;
+                    combo = Math.min(5, combo + 1);
+                }
+
+                target.style.transform = 'scale(1.3)';
+                target.style.opacity = '0';
+                setTimeout(() => target.remove(), 200);
+                updateUI();
+            });
+
+            gameArena.appendChild(target);
+        }
+
+        // Particle effect generator
+        function createParticles(x, y, color) {
+            const rect = particleContainer.getBoundingClientRect();
+            const relX = x - rect.left;
+            const relY = y - rect.top;
+
+            for (let i = 0; i < 10; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'absolute rounded-full pointer-events-none';
+                const size = Math.random() * 8 + 4;
+                particle.style.width = `${size}px`;
+                particle.style.height = `${size}px`;
+                particle.style.backgroundColor = color;
+                particle.style.left = `${relX}px`;
+                particle.style.top = `${relY}px`;
+
+                particleContainer.appendChild(particle);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 60 + 20;
+                const destinationX = relX + Math.cos(angle) * speed;
+                const destinationY = relY + Math.sin(angle) * speed;
+
+                particle.animate([
+                    { transform: 'translate(0, 0) scale(1)', opacity: 1 },
+                    { transform: `translate(${destinationX - relX}px, ${destinationY - relY}px) scale(0)`, opacity: 0 }
+                ], {
+                    duration: 400 + Math.random() * 200,
+                    easing: 'cubic-bezier(0, .9, .57, 1)'
+                }).onfinish = () => particle.remove();
+            }
+        }
+
+        // Floating score popup effect
+        function showPopup(x, y, text, colorClass) {
+            const rect = popupContainer.getBoundingClientRect();
+            const popup = document.createElement('div');
+            popup.className = `absolute font-black text-xl pointer-events-none drop-shadow-lg ${colorClass}`;
+            popup.style.left = `${x - rect.left}px`;
+            popup.style.top = `${y - rect.top}px`;
+            popup.textContent = text;
+            popupContainer.appendChild(popup);
+
+            popup.animate([
+                { transform: 'translateY(0) scale(0.8)', opacity: 1 },
+                { transform: 'translateY(-50px) scale(1.2)', opacity: 0 }
+            ], {
+                duration: 600,
+                easing: 'ease-out'
+            }).onfinish = () => popup.remove();
+        }
+
+        function reloadGun() {
+            if (!isPlaying || ammo === maxAmmo) return;
+            ammo = maxAmmo;
+            playSound('reload');
+            updateUI();
+        }
+
+        // Arena gunshot handler
+        gameArena.addEventListener('pointerdown', (e) => {
+            if (!isPlaying) return;
+            // Only trigger if clicking directly on the arena background
+            if (e.target === gameArena || e.target === particleContainer || e.target === popupContainer) {
+                if (ammo > 0) {
+                    ammo--;
+                    playSound('shoot');
+                    createParticles(e.clientX, e.clientY, '#94a3b8');
+                    // Missed shot reduces combo slightly
+                    combo = Math.max(1, combo - 1);
+                } else {
+                    playSound('empty');
+                }
+                updateUI();
+            }
+        });
+
+        // Keyboard Listener for Reload (R key)
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'r' || e.key === 'R' || e.key === 'ق') {
+                reloadGun();
+            }
+        });
+
+        // Initialize default UI state
+        updateUI();
+    </script>
+</body>
+</html>
